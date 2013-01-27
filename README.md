@@ -3,9 +3,17 @@ GO-ZIP
 
 A wrapper around C library libzip. It tries to mimic standard library "archive/zip" but provides ability to modify existing ZIP archives. 
 
+libzip official site: http://www.nih.at/libzip/index.html
+
 Quick Start
 -----------
 
+###Install libzip
+Please install the development version from the trunk, rather than current stable libzip 0.10.1 released on 2012-03-20. Otherwise, the writing will not function correctly.
+#### Arch Linux
+    packer -S libzip-hg
+#### Others
+    ......
 ###Get the package
 
     go get -u "github.com/hailiang/go-zip"
