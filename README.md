@@ -10,9 +10,9 @@ Quick Start
 
 ###Install libzip
 Please install the development version from the trunk, rather than current stable libzip 0.10.1 released on 2012-03-20. Otherwise, the writing will not function correctly.
-#### Arch Linux
+####In Arch Linux
     packer -S libzip-hg
-#### Others
+####In Others
     ......
 ###Get the package
 
