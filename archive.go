@@ -10,111 +10,90 @@ SEE: http://www.nih.at/libzip/index.html
 package zip
 
 import (
+	. "github.com/hailiang/go-zip/c"
 	"io"
+	"sync"
 )
 
 // Archive provides ability for reading, creating and modifying a ZIP archive.
 type Archive struct {
-	file string
-	z    pzip
-	last *fileWriter
+	z  *Zip
+	mu sync.Mutex
 }
 
 // Open a ZIP archive, create a new one if not exists.
-func Open(file string) (*Archive, error) {
-	a := &Archive{
-		file: file,
-		last: nil}
-	e := a.open_z()
-	if e != nil {
-		return nil, e
+func Open(file string) (a *Archive, err error) {
+	a = &Archive{
+		z: &Zip{Path: file}}
+	err = a.z.Open()
+	if err != nil {
+		return nil, err
 	}
 	return a, nil
 }
 
 // Close z ZIP archive, and modifications get written to the disk when closing.
 func (a *Archive) Close() error {
-	err := a.flush()
-	if err != nil {
-		return err
-	}
-	return a.close_z()
+	return a.z.Close()
 }
 
 // Add a file or directory in the ZIP archive.
 // If name ends with '/', a directory will be added, and returned w will be nil.
-// Otherwise, a file will be added, and w is a Writer to which the file contents should be written. 
-func (a *Archive) Create(name string) (w io.Writer, err error) {
-	err = a.flush()
-	if err != nil {
-		return nil, err
-	}
-
+// Otherwise, a file will be added, and w is a Writer to which the file contents should be written.
+func (a *Archive) Create(name string) (w io.WriteCloser, err error) {
 	if len(name) > 0 && name[len(name)-1] == '/' {
 		return a.createDirectory(name)
 	}
 	return a.createFile(name)
 }
 
-func (a *Archive) createDirectory(name string) (io.Writer, error) {
-	_, err := zip_add_dir(a.z, name)
+func (a *Archive) createDirectory(name string) (io.WriteCloser, error) {
+	a.lock()
+	defer a.unlock()
+	_, err := a.z.AddDir(name)
 	return nil, err
 }
 
-func (a *Archive) createFile(name string) (w io.Writer, err error) {
-	a.last, err = newFileWriter()
+func (a *Archive) createFile(name string) (io.WriteCloser, error) {
+	a.lock()
+	f, err := newFileWriter()
 	if err != nil {
 		return nil, err
 	}
 
+	err = a.z.AddFd(name, f.rpipe.Fd())
+	if err != nil {
+		return nil, err
+	}
+
+	// the writing actually happens when the zip archive is closed.
+	// so reopen it in the background.
 	go func() {
-		err := zip_add_fd(a.z, name, a.last.rpipe.Fd())
-		if err != nil {
-			goto Return
-		}
-		err = a.reopen_z()
-	Return:
-		a.last.done <- err
+		f.done <- a.reopen()
+		a.unlock()
 	}()
-	return a.last, nil
+	return f, nil
 }
 
-func (a *Archive) flush() error {
-	if a.last != nil {
-		err := a.last.Close()
-		a.last = nil
-		return err
-	}
-	return nil
+func (a *Archive) lock() {
+	a.mu.Lock()
 }
 
-func (a *Archive) open_z() (err error) {
-	if a.z == nil {
-		a.z, err = zip_open(a.file, _ZIP_CREATE)
-	}
-	return
+func (a *Archive) unlock() {
+	a.mu.Unlock()
 }
 
-func (a *Archive) close_z() error {
-	if a.z != nil {
-		err := zip_close(a.z)
-		a.z = nil
-		return err
-	}
-	return nil
-}
-
-func (a *Archive) reopen_z() error {
-	err := a.close_z()
+func (a *Archive) reopen() error {
+	err := a.z.Close()
 	if err != nil {
 		return err
 	}
-	return a.open_z()
+	return a.z.Open()
 }
 
 // ZIP entry count in the ZIP archive.
 func (a *Archive) Count() int64 {
-	c, err := zip_get_num_entries(a.z, 0)
+	c, err := a.z.GetNumEntries(0)
 	if err != nil {
 		return 0
 	}
@@ -123,28 +102,27 @@ func (a *Archive) Count() int64 {
 
 // Delete a ZIP entry in the ZIP archive.
 func (a *Archive) Delete(name string) error {
-	index, err := zip_name_locate(a.z, name, 0)
+	index, err := a.z.NameLocate(name, 0)
 	if err != nil {
 		return err
 	}
-	return zip_delete(a.z, uint64(index))
+	return a.z.Delete(uint64(index))
 }
 
 // Rename a ZIP entry in the ZIP archive.
 func (a *Archive) Rename(from, to string) error {
-	index, err := zip_name_locate(a.z, from, 0)
+	index, err := a.z.NameLocate(from, 0)
 	if err != nil {
 		return err
 	}
-	return zip_rename(a.z, uint64(index), to)
+	return a.z.Rename(uint64(index), to)
 }
 
 // Get a file from the ZIP archive.
 func (a *Archive) File(index uint64) (*File, error) {
-	h, err := zip_file_header(a.z, index)
+	h, err := a.z.FileHeader(index)
 	if err != nil {
 		return nil, err
 	}
 	return &File{h, a}, nil
 }
-

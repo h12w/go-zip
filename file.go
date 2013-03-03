@@ -5,6 +5,7 @@
 package zip
 
 import (
+	. "github.com/hailiang/go-zip/c"
 	"io"
 	"os"
 )
@@ -17,7 +18,7 @@ type File struct {
 
 // Open returns a ReadCloser that provides access to the File's contents.
 func (f *File) Open() (rc io.ReadCloser, err error) {
-	fr, err := zip_fopen(f.a.z, f.Name, 0)
+	fr, err := f.a.z.Fopen(f.Name, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -49,22 +50,21 @@ func (w *fileWriter) Write(p []byte) (nn int, err error) {
 func (w *fileWriter) Close() error {
 	w.wpipe.Close()
 	w.wpipe = nil
-	err := <-w.done
+	err := <-w.done // wait for the archive finishing writing.
 	w.rpipe.Close()
 	w.rpipe = nil
 	return err
 }
 
 type fileReader struct {
-	f pzip_file
+	f *ZipFile
 }
 
 func (r *fileReader) Read(b []byte) (int, error) {
-	n, err := zip_fread(r.f, b)
+	n, err := r.f.Read(b)
 	return int(n), err
 }
 
 func (r *fileReader) Close() error {
-	return zip_fclose(r.f)
+	return r.f.Close()
 }
-
