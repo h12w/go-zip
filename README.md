@@ -39,6 +39,7 @@ Please install the development version from the trunk, rather than current stabl
 
     fw, err := a.Create("afile")
     fw.Write("Hello world!")
+    fw.Close()
 
 ####Close
 
