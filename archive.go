@@ -56,12 +56,7 @@ func (a *Archive) createDirectory(name string) (io.WriteCloser, error) {
 
 func (a *Archive) createFile(name string) (io.WriteCloser, error) {
 	a.lock()
-	f, err := newFileWriter()
-	if err != nil {
-		return nil, err
-	}
-
-	err = a.z.AddFd(name, f.rpipe.Fd())
+	f, err := newFileWriter(a.z, name)
 	if err != nil {
 		return nil, err
 	}
